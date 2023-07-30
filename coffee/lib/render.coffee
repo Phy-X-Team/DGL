@@ -53,6 +53,9 @@ a_Vertex_location    =
 u_Transform_location = 
 u_PointSize_location = null
 
+attribs =
+    a_Vertex : { size: 3 }
+    a_Color : { size: 4 }
 
 do ->
     #+ Create program
@@ -68,14 +71,71 @@ do ->
     u_PointSize_location = gl.getUniformLocation glProgram, 'u_PointSize'
 
 
-  
+
+createAttribsBuffer = ( size ) ->
+
+    offset = 0
+    bufferSize = 0
+    pointerSize = 0
+    pointerLength = 0
+
+    for name, attrib of attribs
+        bufferSize += attrib.size * size
+        attrib.pointerOffset = pointerSize
+        pointerSize += attrib.size
+        pointerLength += attrib.size * Float32Array.BYTES_PER_ELEMENT
+
+    console.log {attribs}
+    buffer = new Float32Array bufferSize
+
+    for name, attrib of attribs
+        attrib.index        = gl.getAttribLocation glProgram, name 
+        attrib.size         = attrib.size 
+        attrib.type         = gl.FLOAT 
+        attrib.normalized   = no
+        attrib.stride       = pointerSize 
+        attrib.offset       = offset
+                    
+        offset += attrib.size * Float32Array.BYTES_PER_ELEMENT
+
+    view = new DataView buffer.buffer
+
+    buffer.setData = ( label, data ) ->
+        attrib = attribs[ label ]
+        console.warn pointerSize, data
+
+        dataIndex = 0
+        bufferIndex = 0
+        while dataIndex isnt data.length
+
+            attribIndex = 0
+            while attribIndex isnt attrib.size
+                bufferOffset = ( attrib.index * attrib.stride ) + ( bufferIndex * 4 )
+
+                console.warn { bufferOffset, bufferIndex, dataIndex, attribIndex  }, data[dataIndex]
+                #buffer[ bufferIndex ] = data[ dataIndex ]
+                view.setFloat32 bufferOffset, data[ dataIndex ]
+                
+                dataIndex++
+                attribIndex++
+                bufferOffset++
+
+            bufferIndex++
+
+
+        this
+
+    buffer
+        
+
+buffer = null
 export render = ( objects ) ->
 
     return unless glProgram;
 
     data_transform = new Perspective( objects.scene.fov, aspectRatio )
     
-    for object, parameters of objects
+    for label, parameters of objects
 
         {
             data, color, pointSize,
@@ -91,13 +151,21 @@ export render = ( objects ) ->
         data_transform      .scale( ...[ scaleX, scaleY, scaleZ ] )
         data_transform     .rotate( ...[ rotateX, rotateY, rotateZ ] )
 
-        data_color = new Float32Array data.length * 3
-        rgba = gl.hex2rgb color
-        for i in [ 0 ... data.length ]
-            for c, j in rgba
-                data_color[ ( i * 3 ) + j ] = c
+        data_color = []
 
-        gl.buffer data_color
+        rgba = gl.hex2rgb color
+        for [ 0 ... data.length ]
+            data_color.push ...rgba.slice(0,3), 1
+
+        unless buffer?
+            buffer = createAttribsBuffer 126
+            console.warn buffer
+            console.warn buffer.setData "a_Vertex", data
+            console.warn buffer.setData "a_Color", data_color
+
+        return 
+
+        gl.buffer new Float32Array data_color
         gl.enableVertexAttribArray a_Color_location
         gl.vertexAttribPointer a_Color_location, 3, gl.FLOAT, no, 0, 0
 
