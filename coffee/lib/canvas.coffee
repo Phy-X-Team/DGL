@@ -23,7 +23,7 @@ Object.defineProperties gl, {
             g = ((c>>8)&255) / 255
             b = ((c&255))   / 255
 
-            return new Float32Array [ r, g, b ]
+            return [ r, g, b ]
 
     get             : value : ( byteOffset ) -> @space.getFloat32 byteOffset
     set             : value : ( byteOffset, value ) -> @space.setFloat32 byteOffset, value

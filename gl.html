@@ -188,7 +188,7 @@
 
 	<script type="module" src="main.js"></script>
 	<script type="module">
-		import { render } from "./lib/render.js";
+		import { render, hex2rgb } from "./lib/render.js";
 
 		let objects = new Object();
 
@@ -204,18 +204,48 @@
 			return value || object[ name ];
 		}
 
+		/**
+		 * 
+				
+		0.01, 0.01, -0.01,
+		0.01, -0.01, -0.01,
+		-0.01, -0.01, -0.01,
+		-0.01, -0.01, -0.01,
+		-0.01, 0.01, -0.01,
+		0.01, 0.01, -0.01
+
+		0.01, 0.01, -0.03,
+		0.01, -0.01, -0.03,
+		-0.01, -0.01, -0.03,
+		-0.01, -0.01, -0.03,
+		-0.01, 0.01, -0.03,
+		0.01, 0.01, -0.03
+
+		**/
 
 		let fixPoints = function ( points, object ) {
+
 			let index = 0;
 			let value = points.value.trim().split(/\n/).map(function (line){
 				return line.replace(/\,/g, "").trim().split(/\s/g).map(function (value){					
-					return ( object.data[ index++ ] = value * 1) + ", ";				
+					return ( object.data_vertex[ index++ ] = value * 1) + ", ";				
 				}).join("")
 			}).join("\n").trim()
 
-			value = value.substr(0, value.length-1)
+			let data = value.substr(0, value.length-1)
+			let size = object.data_vertex.length / 3
 
-			return setObject( object, "data", value );
+			if (Number.isInteger(size)) {
+				object.data_color = []
+				while ( size-- ) {
+					object.data_color.push( 
+						...hex2rgb( object.color || "#ffffff" ), 1 
+					)
+				}
+			}
+
+
+			return setObject( object, "data_vertex", data );
 		}		
 
 
@@ -252,16 +282,20 @@
 				}
 
 				if (points) {
-					let d = [ ...object.data ]				
+					let d = [ ...object.data_vertex ]				
 					for (let i = d.length-3; i > 0; i-=3) {
 						d.splice( i, 0, "\n" ) 
 					}
 					points.value = d.join(" ").trim()
 				}
 
+
+
 			} else {
 				object = new Object({ 
-					elements : {}, data: [],
+					elements : {}, 
+					data_color : [],
+					data_vertex : [],
 					version : 1, 
 					label : tab.dataset.label 
 				});
@@ -344,7 +378,7 @@
 				}
 			}
 
-			requestAnimationFrame( onFrame )
+			//requestAnimationFrame( onFrame )
 			render( objects )
 		}
 
