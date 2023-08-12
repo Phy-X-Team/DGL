@@ -6,9 +6,6 @@ import { gl } from "./lib/canvas.js"
 
 
 
-encode = new BufferEncoder()
-decode = new BufferDecoder()
-
 ###
 do ->
     bobject = new BufferObject()
@@ -43,34 +40,25 @@ do ->
     console.error "_resetter (a):", bobject
 ###
 
-window.addEventListener "click", ->
+setTimeout ->
     console.log "dump defined!"
     Object.defineProperties Buffer::, {
-        dump : get : -> @forEach ( offset, byteLength, bufferType, index ) ->
-            buffer = @buffer.slice( offset, offset + byteLength )
-            return buffer unless object = Buffer::[ bufferType ]
-            new object( buffer )
+        dump : get : -> @forEach ( object ) -> object.detach?() or object
     }
 
 export class Buffer extends DataView
 
-    this.getPropertyName    = ( definition ) ->
-        for key, def of this.prototype
-            return key if definition is def
-        return null
-
-    this.register           = ( object, bufferType ) ->
-        
-        Buffer::[ object::bufferType =bufferType ] = object 
+    this.register           = ( object, bufferType ) ->      
+        Buffer::[ object::bufferType = bufferType ] = object 
 
     headLength              : 6
 
     constructor             : ( buffer = new ArrayBuffer( 0, { maxByteLength: 1e6 } ), offset, length ) ->
         super buffer, offset, length
-            .byteLength or this.createBuffer()
+            .byteLength or this.create()
 
-    createBuffer            : ( type = @constructor::bufferType, size = @constructor::bufferSize ) ->
-        length = @headLength + ( size or 0 )
+    create                  : ( type = @constructor::bufferType, size = 0 ) ->
+        length = size + Math.max @headLength, @constructor::headLength
         offset = @allocate length
 
         @setBufferType type ? TYPE.BUFFER, offset
@@ -79,12 +67,30 @@ export class Buffer extends DataView
         offset
 
     allocate                : ( byteLength ) ->
+
+        length = @byteLength + byteLength
+        offset = @byteLength + @byteOffset
+
         @buffer.resize(
-            length = byteLength +
-            offset = @byteLength
+            byteLength + this.buffer.byteLength
         )
+
+        @setBufferSize( length )
+
+        unless ! @byteOffset
         
-        @setBufferSize length ; offset
+            buffer = new Uint8Array @buffer, offset
+            shifts = buffer.byteLength
+
+            while shifts-- then buffer[ shifts ] = 
+                buffer[ shifts - byteLength ]
+            buffer = shifts = null
+
+            return new @constructor(
+                @buffer, @byteOffset, length
+            )
+        
+        return offset
 
     getBufferType           : ( offset = 0 ) ->
         @getUint16 offset
@@ -98,22 +104,68 @@ export class Buffer extends DataView
     setBufferSize           : ( size = @byteLength, offset = 0 ) ->
         @setUint32 offset + 2, size ; @
 
-    forEach                 : ( handler, start = @headLength, end = @byteLength ) ->
-        offset = start
-        result = new Array()
+    getLoopOffset           : ( offset = 0, finish = @byteLength ) ->
+        [ offset + Math.max( @headLength, Buffer::[@bufferType]?::headLength ), finish ]
+    
+    getLoopValues           : ( offset ) ->
+        [ @getBufferType( offset ), size = @getBufferSize( offset ), offset + size ]
 
-        while offset < end
+    object                  : ( offset, type, size ) ->
+        type ?= @getBufferType offset ; size ?= @getBufferSize offset
+        new Buffer::[ type ]?( @buffer, offset, size ) or @slice offset, size
 
-            type = @getBufferType offset
-            size = @getBufferSize offset
+    detach                  : ( offset = @byteOffset, length = @byteLength ) ->
+        new @constructor @slice offset, length
 
-            result[ i = result.length ] = handler.call(
-                @, offset, size, type, i
-            ) unless ! type
+    slice                   : ( offset = 0, length = @byteLength ) ->
+        this.buffer.slice offset, offset + length
 
-            offset = offset + size
+    forEach                 : ( handler, offset, finish ) ->
+        [ offset, finish ] = @getLoopOffset offset, finish
+        ( result = new Array() )
+
+        while offset < finish
+
+            [ type, size, next ] = @getLoopValues offset
+
+            if type then break unless (
+                result[ index = result.length ] =
+                    handler.call( @, @object( offset, type, size ), index )
+            )
+
+            offset = next
 
         return result
+
+    filter                  : ( bufferType, offset, finish ) ->
+        [ offset, finish ] = @getLoopOffset offset, finish
+        ( result = new Array() )
+
+        while offset < finish
+
+            [ type, size, next ] = @getLoopValues offset
+
+            if  bufferType is type
+                result.push @object offset, type, size
+
+            offset = next
+
+        return result        
+
+    find                    : ( bufferType, offset, finish ) ->
+        [ offset, finish ] = @getLoopOffset offset, finish
+        ( result = new Array() )
+
+        while offset < finish
+
+            [ type, size, next ] = @getLoopValues offset
+
+            if  bufferType is type
+                return @object offset, type, size
+
+            offset = next
+
+        return result        
 
     writeString             : ( string, offset = @byteLength, maxByteLength ) ->
 
@@ -153,54 +205,350 @@ export class Buffer extends DataView
         reader = isView and buffer or new DataView buffer 
 
         for i in [ 0 ... length ]
-            @setUint8 offset + i, buffer.getUint8 i
+            @setUint8 offset + i, reader.getUint8 i
         
-        this
+        [ offset, length ]
+
+    writeArray              : ( array, TypedArray = Float32Array ) ->
+        buffer = new TypedArray array
+        offset = @byteLength
+        object = @allocate l = buffer.byteLength
+        length = TypedArray.BYTES_PER_ELEMENT
+
+        writer = switch TypedArray
+            when Float32Array then DataView::setFloat32
+            when Uint32Array  then DataView::setUint32
+            when Uint16Array  then DataView::setUint16
+            when Uint8Array   then DataView::setUint8
+
+        while l -= length
+            console.log l, offset, offset+l, l/length, buffer[l/length], @byteLength
+            writer.call @, offset + l, buffer[l/length]
+            
+        object
 
 
 export class glProgram extends Buffer
+
+    addBuffer               : ( buffer ) ->
+        @writeBuffer buffer , buffer
+
     addShader               : ( buffer ) ->
-        @writeBuffer( buffer )
+        @addBuffer buffer
 
     addAttrib               : ( buffer ) ->
-        @writeBuffer( buffer )
+        @addBuffer buffer
 
-export class glShader extends Buffer
+    addUniform              : ( buffer ) ->
+        @addBuffer buffer
+
+    createObject            : ->
+        length = glObject::headLength 
+        offset = @allocate length
+        
+        new glObject @buffer, offset, length
+
+    getVertexShader         : ->
+        @find gl.VERTEX_SHADER, ...arguments
+
+    getFragmentShader       : ->
+        @find gl.FRAGMENT_SHADER, ...arguments
+
+class glShader extends Buffer
     setShaderSource         : ( source ) ->
         @writeString( source )
 
 export class glVertexShader extends glShader
+
 export class glFragmentShader extends glShader
     
-export class glAttribute extends Buffer
-    bufferSize  : 48
+export class glAttribute extends Buffer    
+    headLength  : 48
+    lengthName  : 32
 
-    nameOffset  : 16
-    typeOffset  : 14
-    slotOffset  : 13
-    sizeOffset  : 12
+    offsetName  : 16
+    offsetType  : 14
+    offsetSlot  : 13
+    offsetSize  : 12
+    offsetSkip  : 11
+
 
     setAttribName           : ( name ) ->
-        @writeString name, @nameOffset, 32
+        @writeString name, @offsetName, @lengthName
 
     setAttribType           : ( type = gl.FLOAT ) ->
-        @setUint16 @typeOffset, type
-
+        @setUint16 @offsetType, type
+    
     setAttribSlot           : ( slot = 0 ) ->
-        @setUint8 @slotOffset, slot
+        @setUint8 @offsetSlot, slot
     
     setAttribSize           : ( size = 1 ) ->
-        @setUint8 @sizeOffset, size
+        @setUint8 @offsetSize, size
 
-export class glInterleavedAttribute extends glAttribute
-    strideOffset  : 10
-    offsetOffset  : 9
+    setAttribSkip           : ( skip = 0 ) ->
+        @setUint8 @offsetSkip, skip
 
-    setAttribStride         : ( stride = 0 ) ->
-        @setUint8 @strideOffset, stride
 
-    setAttribOffset         : ( offset = 0 ) ->
-        @setUint8 @offsetOffset, offset
+    getAttribName           : ->
+        @readString @offsetName, @lengthName
+
+    getAttribType           : ->
+        @getUint16 @offsetType
+
+    getAttribSlot           : ->
+        @getUint8 @offsetSlot    
+    
+    getAttribSize           : ->
+        @getUint8 @offsetSize
+    
+    getAttribSkip           : ->
+        @getUint8 @offsetSkip
+
+export class glInterleavedAttribute extends Buffer
+
+    strideOffset : 8
+    lengthOffset : 9
+
+    headLength   : 10
+    typeLength   :
+        [ gl.FLOAT ]          : 4
+        [ gl.INT ]            : 4
+        [ gl.UNSIGNED_INT ]   : 4
+        [ gl.BYTE ]           : 1
+        [ gl.UNSIGNED_BYTE ]  : 1
+        [ gl.SHORT ]          : 2
+        [ gl.UNSIGNED_SHORT ] : 2
+
+    addAttrib               : ( buffer ) ->
+        length = @typeLength[ buffer.getAttribType() ]
+        buffer . setAttribSkip @getStride() * length
+
+        @setStride @getStride() + buffer.getAttribSize()
+        @setLength @getStride() * length
+
+        @writeBuffer buffer
+
+    setStride               : ( stride ) ->
+        @setUint8 @strideOffset, stride ; stride
+
+    setLength               : ( length ) ->
+        @setUint8 @lengthOffset, length ; length
+
+    getStride               : ->
+        @getUint8 @strideOffset
+
+    getLength               : ->
+        @getUint8 @lengthOffset
+
+class glUniform extends Buffer
+
+    headLength  : 38
+    lengthName  : 32
+    offsetName  : 6
+
+    setUniformName          : ( name ) ->
+        @writeString name, @offsetName, @lengthName
+
+    getUniformName          : ->
+        @readString @offsetName, @lengthName
+
+export class glUniform1f extends glUniform
+    headLength  : 42
+    ufv0Offset  : 38
+
+    setUniformValue         : ( value ) ->
+        @setFloat32 @ufv0Offset, value ; value
+
+    getUniformValue         : ->
+        @getFloat32 @ufv0Offset
+
+export class glColor extends Buffer
+    headLength  : 24
+    colorOffset : 8
+
+    rgbLength   : 12
+    rgbaLength  : 16
+
+    redOffset   : 8
+    blueOffset  : 16
+    greenOffset : 12
+    alphaOffset : 20
+
+    setHEXColor             : ( hex ) ->
+        c = ( hex.substring(1).split '' )
+        c = [ c[0], c[0], c[1], c[1], c[2], c[2] ] if c.length is 3
+        c = '0x' + c.join ''
+
+        @setFloat32 @redOffset, ((c >> 16) & 255) / 255
+        @setFloat32 @greenOffset, ((c >> 8 ) & 255) / 255
+        @setFloat32 @blueOffset (( c & 255 )) / 255
+
+    setRGBAColor            : ( red, green, blue, alpha = 1 ) ->
+        @setFloat32 @redOffset, red
+        @setFloat32 @greenOffset, green
+        @setFloat32 @blueOffset, blue
+        @setFloat32 @alphaOffset, alpha
+
+    setRGBColor             : ( red, green, blue ) ->
+        @setFloat32 @redOffset, red
+        @setFloat32 @greenOffset, green
+        @setFloat32 @blueOffset, blue
+
+    setRedColor             : ( red ) ->
+        @setFloat32 @redOffset, red
+
+    setGreenColor           : ( green ) ->
+        @setFloat32 @greenOffset, green
+
+    setBlueColor            : ( blue ) ->
+        @setFloat32 @blueOffset, blue
+
+    setColorAlpha           : ( alpha ) ->
+        @setFloat32 @alphaOffset, alpha
+
+
+    getRGBAColor            : ->
+        new Float32Array @slice( @colorOffset, @rgbaLength )
+
+    getRGBColor             : ->
+        new Float32Array @slice( @colorOffset, @rgbLength )
+
+    getRedColor             : ->
+        @getFloat32 @redOffset
+
+    getGreenColor           : ->
+        @getFloat32 @greenOffset
+
+    getBlueColor            : ->
+        @getFloat32 @blueOffset
+
+    getColorAlpha           : ->
+        @getFloat32 @alphaOffset
+
+export class glUniformMatrix4fv extends glUniform
+
+export class glObject extends Buffer
+
+    headLength              : 90
+
+    lengthName              : 36
+
+    offsetName              : 10
+
+    offsetRotateX           : 46
+
+    offsetRotateY           : 50
+
+    offsetRotateZ           : 54
+
+    offsetScaleX            : 58
+
+    offsetScaleY            : 62
+
+    offsetScaleZ            : 62
+
+    offsetTranslateX        : 66
+
+    offsetTranslateY        : 70
+
+    offsetTranslateZ        : 74
+
+    offsetPointCount        : 78
+
+    offsetChangeMark        : 82
+
+    offsetBufferData        : 90
+    
+
+    needsUpdate             : ( mark ) ->
+        unless mark? #TODO mark changed when asked 
+            @setUint8 @offsetUpdateMark , 0
+            return Boolean @getUint8 @offsetChangeMark 
+        @setUint8 @offsetUpdateMark, Number mark; mark
+
+    setName                 : ( name ) ->
+        @writeString name, @offsetName, @lengthName
+
+    setRotateX              : ( radians ) ->
+        @setFloat32 @offsetRotateX, radians
+
+    setRotateY              : ( radians ) ->
+        @setFloat32 @offsetRotateY, radians
+
+    setRotateZ              : ( radians ) ->
+        @setFloat32 @offsetRotateZ, radians
+
+    setScaleX               : ( ratio ) ->
+        @setFloat32 @offsetScaleX, ratio
+
+    setScaleY               : ( ratio ) ->
+        @setFloat32 @offsetScaleY, ratio
+
+    setScaleZ               : ( ratio ) ->
+        @setFloat32 @offsetScaleZ, ratio
+
+    setTranslateX           : ( distance ) ->
+        @setFloat32 @offsetTranslateX, distance
+
+    setTranslateY           : ( distance ) ->
+        @setFloat32 @offsetTranslateY, distance
+
+    setTranslateZ           : ( distance ) ->
+        @setFloat32 @offsetTranslateZ, distance
+
+    setPointCount           : ( count ) ->
+        @setUint32 @offsetPointCount, count
+
+    setBufferData           : ( data, TYPE ) ->
+        unless isNaN @writeArray data, TYPE
+            @pointer ?= @writeArray data, TYPE
+
+#TODO       BURADA EGER ALT OBJE BIR POINTERE SAHIPSE
+#TODO       O ZAMAN ATTACH OLMUS DEMEKTIR
+#TODO       AMA SAYI DEGIL BIR BUFFER OLMALI BU POINTER
+#TODO       ISTE O BUFFER BUNUN SAHIBI
+#TODO       SANIRIM AYRICA BUNU ALLOCATE YAPINCA YENI BIR BUFFER OLUYOR
+#TODO       O MAX BYTE LENGTH EN KUCUK OBJEDE BILE BUYUK SANIRIM
+#TODO       NEYSE KUCUK OLANI ALLOCATE YAP BUYUSUN
+#TODO       SONRA PROGRAMA ATTACH YAPILDIGINDA KOPYALA
+#TODO       GERI KALAN OBJEYE DE POINTER ATA PROGRAMI
+#TODO       SONRA KUCUK OBJECE YAPILAN DEGISIKLIKLERI PROGRAMA YAZ
+#TODO       <3
+
+
+    getName                 : ->
+        @readString @offsetName, @lengthName
+
+    getRotateX              : ->
+        @getFloat32 @offsetRotateX
+
+    getRotateY              : ->
+        @getFloat32 @offsetRotateY
+
+    getRotateZ              : ->
+        @getFloat32 @offsetRotateZ
+
+    getScaleX               : ->
+        @getFloat32 @offsetScaleX
+
+    getScaleY               : ->
+        @getFloat32 @offsetScaleY
+
+    getScaleZ               : ->
+        @getFloat32 @offsetScaleZ
+
+    getTranslateX           : ->
+        @getFloat32 @offsetTranslateX
+
+    getTranslateY           : ->
+        @getFloat32 @offsetTranslateY
+
+    getTranslateZ           : ->
+        @getFloat32 @offsetTranslateZ
+
+    getPointCount           : ->
+        @getUint32 @offsetPointCount
+
 
 
 Buffer.register glProgram, TYPE.GL_PROGRAM
@@ -209,6 +557,10 @@ Buffer.register glVertexShader, gl.VERTEX_SHADER
 Buffer.register glFragmentShader, gl.FRAGMENT_SHADER
 Buffer.register glAttribute, gl.SEPARATE_ATTRIBS
 Buffer.register glInterleavedAttribute, gl.INTERLEAVED_ATTRIBS
+Buffer.register glUniform1f, TYPE.GL_UNIFORM_1F
+Buffer.register glColor, gl.COLOR
+Buffer.register glUniformMatrix4fv, TYPE.GL_UNIFORM_MATRIX4FV
+Buffer.register glObject, TYPE.GL_OBJECT
 
 
 
@@ -552,13 +904,13 @@ export class glAttrib extends TypedBuffer
 
     bufferType              : TYPE.GL_ATTRIB_BUFFER
 
-    nameLength              : 32
+    lengthName              : 32
 
-    nameOffset              : 12
+    offsetName              : 12
 
-    sizeOffset              : 44
+    offsetSize              : 44
     
-    typeOffset              : 46
+    offsetType              : 46
 
     strideOffset            : 48
 
@@ -588,27 +940,27 @@ export class glAttrib extends TypedBuffer
 
     setAttribName           : ( name ) ->
         buffer = encode.string name
-        length = Math.min @nameLength, buffer.byteLength
+        length = Math.min @lengthName, buffer.byteLength
         tarray = new Uint8Array buffer, 0, length 
 
         for uint8, index in tarray
-            @setUint8 @nameOffset + index, uint8
+            @setUint8 @offsetName + index, uint8
         @
 
     getAttribName           : ->
-        decode.string @buffer, @nameOffset, @nameLength
+        decode.string @buffer, @offsetName, @lengthName
     
     setAttribSize           : ( size ) ->
-        @setUint8 @sizeOffset, size ; @
+        @setUint8 @offsetSize, size ; @
 
     getAttribSize           : ->
-        @getUint8 @sizeOffset
+        @getUint8 @offsetSize
     
     setAttribType           : ( type ) ->
-        @setUint16 @typeOffset, type; @
+        @setUint16 @offsetType, type; @
 
     getAttribType           : ->
-        @getUint16 @typeOffset
+        @getUint16 @offsetType
     
     setAttribStride         : ( size = @getAttributeSize(), bytes = @BYTES_PER_ELEMENT ) ->
         @setUint8( @strideOffset, stride = size * bytes ); stride

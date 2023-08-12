@@ -1,4 +1,4 @@
-var decode, encode;
+var glShader, glUniform;
 
 import TYPE from "./lib/constants.js";
 
@@ -18,10 +18,6 @@ import {
 import {
   gl
 } from "./lib/canvas.js";
-
-encode = new BufferEncoder();
-
-decode = new BufferDecoder();
 
 /*
 do ->
@@ -55,18 +51,13 @@ do ->
     console.error "_resetter (a):", bobject.a = "özgür"
     console.error "_resetter (a):", bobject
 */
-window.addEventListener("click", function() {
+setTimeout(function() {
   console.log("dump defined!");
   return Object.defineProperties(Buffer.prototype, {
     dump: {
       get: function() {
-        return this.forEach(function(offset, byteLength, bufferType, index) {
-          var buffer, object;
-          buffer = this.buffer.slice(offset, offset + byteLength);
-          if (!(object = Buffer.prototype[bufferType])) {
-            return buffer;
-          }
-          return new object(buffer);
+        return this.forEach(function(object) {
+          return (typeof object.detach === "function" ? object.detach() : void 0) || object;
         });
       }
     }
@@ -75,18 +66,6 @@ window.addEventListener("click", function() {
 
 export var Buffer = (function() {
   class Buffer extends DataView {
-    static getPropertyName(definition) {
-      var def, key, ref;
-      ref = this.prototype;
-      for (key in ref) {
-        def = ref[key];
-        if (definition === def) {
-          return key;
-        }
-      }
-      return null;
-    }
-
     static register(object, bufferType) {
       return Buffer.prototype[object.prototype.bufferType = bufferType] = object;
     }
@@ -94,12 +73,12 @@ export var Buffer = (function() {
     constructor(buffer = new ArrayBuffer(0, {
         maxByteLength: 1e6
       }), offset, length) {
-      super(buffer, offset, length).byteLength || this.createBuffer();
+      super(buffer, offset, length).byteLength || this.create();
     }
 
-    createBuffer(type = this.constructor.prototype.bufferType, size = this.constructor.prototype.bufferSize) {
+    create(type = this.constructor.prototype.bufferType, size = 0) {
       var length, offset;
-      length = this.headLength + (size || 0);
+      length = size + Math.max(this.headLength, this.constructor.prototype.headLength);
       offset = this.allocate(length);
       this.setBufferType(type != null ? type : TYPE.BUFFER, offset);
       this.setBufferSize(length, offset);
@@ -107,9 +86,20 @@ export var Buffer = (function() {
     }
 
     allocate(byteLength) {
-      var length, offset;
-      this.buffer.resize(length = byteLength + (offset = this.byteLength));
+      var buffer, length, offset, shifts;
+      length = this.byteLength + byteLength;
+      offset = this.byteLength + this.byteOffset;
+      this.buffer.resize(byteLength + this.buffer.byteLength);
       this.setBufferSize(length);
+      if (!!this.byteOffset) {
+        buffer = new Uint8Array(this.buffer, offset);
+        shifts = buffer.byteLength;
+        while (shifts--) {
+          buffer[shifts] = buffer[shifts - byteLength];
+        }
+        buffer = shifts = null;
+        return new this.constructor(this.buffer, this.byteOffset, length);
+      }
       return offset;
     }
 
@@ -131,17 +121,75 @@ export var Buffer = (function() {
       return this;
     }
 
-    forEach(handler, start = this.headLength, end = this.byteLength) {
-      var i, offset, result, size, type;
-      offset = start;
-      result = new Array();
-      while (offset < end) {
+    getLoopOffset(offset = 0, finish = this.byteLength) {
+      var ref;
+      return [offset + Math.max(this.headLength, (ref = Buffer.prototype[this.bufferType]) != null ? ref.prototype.headLength : void 0), finish];
+    }
+
+    getLoopValues(offset) {
+      var size;
+      return [this.getBufferType(offset), size = this.getBufferSize(offset), offset + size];
+    }
+
+    object(offset, type, size) {
+      var base;
+      if (type == null) {
         type = this.getBufferType(offset);
+      }
+      if (size == null) {
         size = this.getBufferSize(offset);
-        if (!!type) {
-          result[i = result.length] = handler.call(this, offset, size, type, i);
+      }
+      return (typeof (base = Buffer.prototype)[type] === "function" ? new base[type](this.buffer, offset, size) : void 0) || this.slice(offset, size);
+    }
+
+    detach(offset = this.byteOffset, length = this.byteLength) {
+      return new this.constructor(this.slice(offset, length));
+    }
+
+    slice(offset = 0, length = this.byteLength) {
+      return this.buffer.slice(offset, offset + length);
+    }
+
+    forEach(handler, offset, finish) {
+      var index, next, result, size, type;
+      [offset, finish] = this.getLoopOffset(offset, finish);
+      (result = new Array());
+      while (offset < finish) {
+        [type, size, next] = this.getLoopValues(offset);
+        if (type) {
+          if (!(result[index = result.length] = handler.call(this, this.object(offset, type, size), index))) {
+            break;
+          }
         }
-        offset = offset + size;
+        offset = next;
+      }
+      return result;
+    }
+
+    filter(bufferType, offset, finish) {
+      var next, result, size, type;
+      [offset, finish] = this.getLoopOffset(offset, finish);
+      (result = new Array());
+      while (offset < finish) {
+        [type, size, next] = this.getLoopValues(offset);
+        if (bufferType === type) {
+          result.push(this.object(offset, type, size));
+        }
+        offset = next;
+      }
+      return result;
+    }
+
+    find(bufferType, offset, finish) {
+      var next, result, size, type;
+      [offset, finish] = this.getLoopOffset(offset, finish);
+      (result = new Array());
+      while (offset < finish) {
+        [type, size, next] = this.getLoopValues(offset);
+        if (bufferType === type) {
+          return this.object(offset, type, size);
+        }
+        offset = next;
       }
       return result;
     }
@@ -191,9 +239,34 @@ export var Buffer = (function() {
       offset = this.allocate(length = buffer.byteLength);
       reader = isView && buffer || new DataView(buffer);
       for (i = j = 0, ref = length; (0 <= ref ? j < ref : j > ref); i = 0 <= ref ? ++j : --j) {
-        this.setUint8(offset + i, buffer.getUint8(i));
+        this.setUint8(offset + i, reader.getUint8(i));
       }
-      return this;
+      return [offset, length];
+    }
+
+    writeArray(array, TypedArray = Float32Array) {
+      var buffer, l, length, object, offset, writer;
+      buffer = new TypedArray(array);
+      offset = this.byteLength;
+      object = this.allocate(l = buffer.byteLength);
+      length = TypedArray.BYTES_PER_ELEMENT;
+      writer = (function() {
+        switch (TypedArray) {
+          case Float32Array:
+            return DataView.prototype.setFloat32;
+          case Uint32Array:
+            return DataView.prototype.setUint32;
+          case Uint16Array:
+            return DataView.prototype.setUint16;
+          case Uint8Array:
+            return DataView.prototype.setUint8;
+        }
+      })();
+      while (l -= length) {
+        console.log(l, offset, offset + l, l / length, buffer[l / length], this.byteLength);
+        writer.call(this, offset + l, buffer[l / length]);
+      }
+      return object;
     }
 
   };
@@ -205,17 +278,40 @@ export var Buffer = (function() {
 }).call(this);
 
 export var glProgram = class glProgram extends Buffer {
+  addBuffer(buffer) {
+    return this.writeBuffer(buffer, buffer);
+  }
+
   addShader(buffer) {
-    return this.writeBuffer(buffer);
+    return this.addBuffer(buffer);
   }
 
   addAttrib(buffer) {
-    return this.writeBuffer(buffer);
+    return this.addBuffer(buffer);
+  }
+
+  addUniform(buffer) {
+    return this.addBuffer(buffer);
+  }
+
+  createObject() {
+    var length, offset;
+    length = glObject.prototype.headLength;
+    offset = this.allocate(length);
+    return new glObject(this.buffer, offset, length);
+  }
+
+  getVertexShader() {
+    return this.find(gl.VERTEX_SHADER, ...arguments);
+  }
+
+  getFragmentShader() {
+    return this.find(gl.FRAGMENT_SHADER, ...arguments);
   }
 
 };
 
-export var glShader = class glShader extends Buffer {
+glShader = class glShader extends Buffer {
   setShaderSource(source) {
     return this.writeString(source);
   }
@@ -229,54 +325,399 @@ export var glFragmentShader = class glFragmentShader extends glShader {};
 export var glAttribute = (function() {
   class glAttribute extends Buffer {
     setAttribName(name) {
-      return this.writeString(name, this.nameOffset, 32);
+      return this.writeString(name, this.offsetName, this.lengthName);
     }
 
     setAttribType(type = gl.FLOAT) {
-      return this.setUint16(this.typeOffset, type);
+      return this.setUint16(this.offsetType, type);
     }
 
     setAttribSlot(slot = 0) {
-      return this.setUint8(this.slotOffset, slot);
+      return this.setUint8(this.offsetSlot, slot);
     }
 
     setAttribSize(size = 1) {
-      return this.setUint8(this.sizeOffset, size);
+      return this.setUint8(this.offsetSize, size);
+    }
+
+    setAttribSkip(skip = 0) {
+      return this.setUint8(this.offsetSkip, skip);
+    }
+
+    getAttribName() {
+      return this.readString(this.offsetName, this.lengthName);
+    }
+
+    getAttribType() {
+      return this.getUint16(this.offsetType);
+    }
+
+    getAttribSlot() {
+      return this.getUint8(this.offsetSlot);
+    }
+
+    getAttribSize() {
+      return this.getUint8(this.offsetSize);
+    }
+
+    getAttribSkip() {
+      return this.getUint8(this.offsetSkip);
     }
 
   };
 
-  glAttribute.prototype.bufferSize = 48;
+  glAttribute.prototype.headLength = 48;
 
-  glAttribute.prototype.nameOffset = 16;
+  glAttribute.prototype.lengthName = 32;
 
-  glAttribute.prototype.typeOffset = 14;
+  glAttribute.prototype.offsetName = 16;
 
-  glAttribute.prototype.slotOffset = 13;
+  glAttribute.prototype.offsetType = 14;
 
-  glAttribute.prototype.sizeOffset = 12;
+  glAttribute.prototype.offsetSlot = 13;
+
+  glAttribute.prototype.offsetSize = 12;
+
+  glAttribute.prototype.offsetSkip = 11;
 
   return glAttribute;
 
 }).call(this);
 
 export var glInterleavedAttribute = (function() {
-  class glInterleavedAttribute extends glAttribute {
-    setAttribStride(stride = 0) {
-      return this.setUint8(this.strideOffset, stride);
+  class glInterleavedAttribute extends Buffer {
+    addAttrib(buffer) {
+      var length;
+      length = this.typeLength[buffer.getAttribType()];
+      buffer.setAttribSkip(this.getStride() * length);
+      this.setStride(this.getStride() + buffer.getAttribSize());
+      this.setLength(this.getStride() * length);
+      return this.writeBuffer(buffer);
     }
 
-    setAttribOffset(offset = 0) {
-      return this.setUint8(this.offsetOffset, offset);
+    setStride(stride) {
+      this.setUint8(this.strideOffset, stride);
+      return stride;
+    }
+
+    setLength(length) {
+      this.setUint8(this.lengthOffset, length);
+      return length;
+    }
+
+    getStride() {
+      return this.getUint8(this.strideOffset);
+    }
+
+    getLength() {
+      return this.getUint8(this.lengthOffset);
     }
 
   };
 
-  glInterleavedAttribute.prototype.strideOffset = 10;
+  glInterleavedAttribute.prototype.strideOffset = 8;
 
-  glInterleavedAttribute.prototype.offsetOffset = 9;
+  glInterleavedAttribute.prototype.lengthOffset = 9;
+
+  glInterleavedAttribute.prototype.headLength = 10;
+
+  glInterleavedAttribute.prototype.typeLength = {
+    [gl.FLOAT]: 4,
+    [gl.INT]: 4,
+    [gl.UNSIGNED_INT]: 4,
+    [gl.BYTE]: 1,
+    [gl.UNSIGNED_BYTE]: 1,
+    [gl.SHORT]: 2,
+    [gl.UNSIGNED_SHORT]: 2
+  };
 
   return glInterleavedAttribute;
+
+}).call(this);
+
+glUniform = (function() {
+  class glUniform extends Buffer {
+    setUniformName(name) {
+      return this.writeString(name, this.offsetName, this.lengthName);
+    }
+
+    getUniformName() {
+      return this.readString(this.offsetName, this.lengthName);
+    }
+
+  };
+
+  glUniform.prototype.headLength = 38;
+
+  glUniform.prototype.lengthName = 32;
+
+  glUniform.prototype.offsetName = 6;
+
+  return glUniform;
+
+}).call(this);
+
+export var glUniform1f = (function() {
+  class glUniform1f extends glUniform {
+    setUniformValue(value) {
+      this.setFloat32(this.ufv0Offset, value);
+      return value;
+    }
+
+    getUniformValue() {
+      return this.getFloat32(this.ufv0Offset);
+    }
+
+  };
+
+  glUniform1f.prototype.headLength = 42;
+
+  glUniform1f.prototype.ufv0Offset = 38;
+
+  return glUniform1f;
+
+}).call(this);
+
+export var glColor = (function() {
+  class glColor extends Buffer {
+    setHEXColor(hex) {
+      var c;
+      c = hex.substring(1).split('');
+      if (c.length === 3) {
+        c = [c[0], c[0], c[1], c[1], c[2], c[2]];
+      }
+      c = '0x' + c.join('');
+      this.setFloat32(this.redOffset, ((c >> 16) & 255) / 255);
+      this.setFloat32(this.greenOffset, ((c >> 8) & 255) / 255);
+      return this.setFloat32(this.blueOffset((c & 255) / 255));
+    }
+
+    setRGBAColor(red, green, blue, alpha = 1) {
+      this.setFloat32(this.redOffset, red);
+      this.setFloat32(this.greenOffset, green);
+      this.setFloat32(this.blueOffset, blue);
+      return this.setFloat32(this.alphaOffset, alpha);
+    }
+
+    setRGBColor(red, green, blue) {
+      this.setFloat32(this.redOffset, red);
+      this.setFloat32(this.greenOffset, green);
+      return this.setFloat32(this.blueOffset, blue);
+    }
+
+    setRedColor(red) {
+      return this.setFloat32(this.redOffset, red);
+    }
+
+    setGreenColor(green) {
+      return this.setFloat32(this.greenOffset, green);
+    }
+
+    setBlueColor(blue) {
+      return this.setFloat32(this.blueOffset, blue);
+    }
+
+    setColorAlpha(alpha) {
+      return this.setFloat32(this.alphaOffset, alpha);
+    }
+
+    getRGBAColor() {
+      return new Float32Array(this.slice(this.colorOffset, this.rgbaLength));
+    }
+
+    getRGBColor() {
+      return new Float32Array(this.slice(this.colorOffset, this.rgbLength));
+    }
+
+    getRedColor() {
+      return this.getFloat32(this.redOffset);
+    }
+
+    getGreenColor() {
+      return this.getFloat32(this.greenOffset);
+    }
+
+    getBlueColor() {
+      return this.getFloat32(this.blueOffset);
+    }
+
+    getColorAlpha() {
+      return this.getFloat32(this.alphaOffset);
+    }
+
+  };
+
+  glColor.prototype.headLength = 24;
+
+  glColor.prototype.colorOffset = 8;
+
+  glColor.prototype.rgbLength = 12;
+
+  glColor.prototype.rgbaLength = 16;
+
+  glColor.prototype.redOffset = 8;
+
+  glColor.prototype.blueOffset = 16;
+
+  glColor.prototype.greenOffset = 12;
+
+  glColor.prototype.alphaOffset = 20;
+
+  return glColor;
+
+}).call(this);
+
+export var glUniformMatrix4fv = class glUniformMatrix4fv extends glUniform {};
+
+export var glObject = (function() {
+  class glObject extends Buffer {
+    needsUpdate(mark) {
+      if (mark == null) {
+        this.setUint8(this.offsetUpdateMark, 0);
+        return Boolean(this.getUint8(this.offsetChangeMark)); //TODO mark changed when asked 
+      }
+      this.setUint8(this.offsetUpdateMark, Number(mark));
+      return mark;
+    }
+
+    setName(name) {
+      return this.writeString(name, this.offsetName, this.lengthName);
+    }
+
+    setRotateX(radians) {
+      return this.setFloat32(this.offsetRotateX, radians);
+    }
+
+    setRotateY(radians) {
+      return this.setFloat32(this.offsetRotateY, radians);
+    }
+
+    setRotateZ(radians) {
+      return this.setFloat32(this.offsetRotateZ, radians);
+    }
+
+    setScaleX(ratio) {
+      return this.setFloat32(this.offsetScaleX, ratio);
+    }
+
+    setScaleY(ratio) {
+      return this.setFloat32(this.offsetScaleY, ratio);
+    }
+
+    setScaleZ(ratio) {
+      return this.setFloat32(this.offsetScaleZ, ratio);
+    }
+
+    setTranslateX(distance) {
+      return this.setFloat32(this.offsetTranslateX, distance);
+    }
+
+    setTranslateY(distance) {
+      return this.setFloat32(this.offsetTranslateY, distance);
+    }
+
+    setTranslateZ(distance) {
+      return this.setFloat32(this.offsetTranslateZ, distance);
+    }
+
+    setPointCount(count) {
+      return this.setUint32(this.offsetPointCount, count);
+    }
+
+    setBufferData(data, TYPE) {
+      if (!isNaN(this.writeArray(data, TYPE))) {
+        return this.pointer != null ? this.pointer : this.pointer = this.writeArray(data, TYPE);
+      }
+    }
+
+    //TODO       BURADA EGER ALT OBJE BIR POINTERE SAHIPSE
+    //TODO       O ZAMAN ATTACH OLMUS DEMEKTIR
+    //TODO       AMA SAYI DEGIL BIR BUFFER OLMALI BU POINTER
+    //TODO       ISTE O BUFFER BUNUN SAHIBI
+    //TODO       SANIRIM AYRICA BUNU ALLOCATE YAPINCA YENI BIR BUFFER OLUYOR
+    //TODO       O MAX BYTE LENGTH EN KUCUK OBJEDE BILE BUYUK SANIRIM
+    //TODO       NEYSE KUCUK OLANI ALLOCATE YAP BUYUSUN
+    //TODO       SONRA PROGRAMA ATTACH YAPILDIGINDA KOPYALA
+    //TODO       GERI KALAN OBJEYE DE POINTER ATA PROGRAMI
+    //TODO       SONRA KUCUK OBJECE YAPILAN DEGISIKLIKLERI PROGRAMA YAZ
+    //TODO       <3
+    getName() {
+      return this.readString(this.offsetName, this.lengthName);
+    }
+
+    getRotateX() {
+      return this.getFloat32(this.offsetRotateX);
+    }
+
+    getRotateY() {
+      return this.getFloat32(this.offsetRotateY);
+    }
+
+    getRotateZ() {
+      return this.getFloat32(this.offsetRotateZ);
+    }
+
+    getScaleX() {
+      return this.getFloat32(this.offsetScaleX);
+    }
+
+    getScaleY() {
+      return this.getFloat32(this.offsetScaleY);
+    }
+
+    getScaleZ() {
+      return this.getFloat32(this.offsetScaleZ);
+    }
+
+    getTranslateX() {
+      return this.getFloat32(this.offsetTranslateX);
+    }
+
+    getTranslateY() {
+      return this.getFloat32(this.offsetTranslateY);
+    }
+
+    getTranslateZ() {
+      return this.getFloat32(this.offsetTranslateZ);
+    }
+
+    getPointCount() {
+      return this.getUint32(this.offsetPointCount);
+    }
+
+  };
+
+  glObject.prototype.headLength = 90;
+
+  glObject.prototype.lengthName = 36;
+
+  glObject.prototype.offsetName = 10;
+
+  glObject.prototype.offsetRotateX = 46;
+
+  glObject.prototype.offsetRotateY = 50;
+
+  glObject.prototype.offsetRotateZ = 54;
+
+  glObject.prototype.offsetScaleX = 58;
+
+  glObject.prototype.offsetScaleY = 62;
+
+  glObject.prototype.offsetScaleZ = 62;
+
+  glObject.prototype.offsetTranslateX = 66;
+
+  glObject.prototype.offsetTranslateY = 70;
+
+  glObject.prototype.offsetTranslateZ = 74;
+
+  glObject.prototype.offsetPointCount = 78;
+
+  glObject.prototype.offsetChangeMark = 82;
+
+  glObject.prototype.offsetBufferData = 90;
+
+  return glObject;
 
 }).call(this);
 
@@ -291,6 +732,14 @@ Buffer.register(glFragmentShader, gl.FRAGMENT_SHADER);
 Buffer.register(glAttribute, gl.SEPARATE_ATTRIBS);
 
 Buffer.register(glInterleavedAttribute, gl.INTERLEAVED_ATTRIBS);
+
+Buffer.register(glUniform1f, TYPE.GL_UNIFORM_1F);
+
+Buffer.register(glColor, gl.COLOR);
+
+Buffer.register(glUniformMatrix4fv, TYPE.GL_UNIFORM_MATRIX4FV);
+
+Buffer.register(glObject, TYPE.GL_OBJECT);
 
 /*
 
@@ -618,13 +1067,13 @@ export class glAttrib extends TypedBuffer
 
     bufferType              : TYPE.GL_ATTRIB_BUFFER
 
-    nameLength              : 32
+    lengthName              : 32
 
-    nameOffset              : 12
+    offsetName              : 12
 
-    sizeOffset              : 44
+    offsetSize              : 44
 
-    typeOffset              : 46
+    offsetType              : 46
 
     strideOffset            : 48
 
@@ -654,27 +1103,27 @@ export class glAttrib extends TypedBuffer
 
     setAttribName           : ( name ) ->
         buffer = encode.string name
-        length = Math.min @nameLength, buffer.byteLength
+        length = Math.min @lengthName, buffer.byteLength
         tarray = new Uint8Array buffer, 0, length 
 
         for uint8, index in tarray
-            @setUint8 @nameOffset + index, uint8
+            @setUint8 @offsetName + index, uint8
         @
 
     getAttribName           : ->
-        decode.string @buffer, @nameOffset, @nameLength
+        decode.string @buffer, @offsetName, @lengthName
 
     setAttribSize           : ( size ) ->
-        @setUint8 @sizeOffset, size ; @
+        @setUint8 @offsetSize, size ; @
 
     getAttribSize           : ->
-        @getUint8 @sizeOffset
+        @getUint8 @offsetSize
 
     setAttribType           : ( type ) ->
-        @setUint16 @typeOffset, type; @
+        @setUint16 @offsetType, type; @
 
     getAttribType           : ->
-        @getUint16 @typeOffset
+        @getUint16 @offsetType
 
     setAttribStride         : ( size = @getAttributeSize(), bytes = @BYTES_PER_ELEMENT ) ->
         @setUint8( @strideOffset, stride = size * bytes ); stride

@@ -194,6 +194,8 @@
 
 		let setObject = function ( object, name, value = null ) {
 
+
+
 			localStorage.setItem( object.label, JSON.stringify({
 				...object 	, 
 				change		: name,
@@ -233,17 +235,6 @@
 			}).join("\n").trim()
 
 			let data = value.substr(0, value.length-1)
-			let size = object.data_vertex.length / 3
-
-			if (Number.isInteger(size)) {
-				object.data_color = []
-				while ( size-- ) {
-					object.data_color.push( 
-						...hex2rgb( object.color || "#ffffff" ), 1 
-					)
-				}
-			}
-
 
 			return setObject( object, "data_vertex", data );
 		}		
@@ -338,6 +329,15 @@
 					switch ( type ) {
 						case "range": value = value * 1; break;
 						case "checkbox": value = input.checked; break;
+						case "color":
+							let size = object.data_vertex.length / 3
+							let color_rgb = hex2rgb( value );
+							let data_color = []
+							while ( size-- ) {
+								data_color.push(...color_rgb)
+							}
+							setObject( object, "data_color", object.data_color = data_color );
+						break;
 					}
 
 					object[ name ] = 
@@ -378,7 +378,7 @@
 				}
 			}
 
-			//requestAnimationFrame( onFrame )
+			requestAnimationFrame( onFrame )
 			render( objects )
 		}
 
