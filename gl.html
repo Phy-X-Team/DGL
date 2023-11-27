@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
-
 <head>
+	<link rel="icon" href="data:;base64,=">
 	<meta charset="UTF-8">
 	<style>
 		html, body { 
@@ -10,7 +10,7 @@
 			font-family: Ubuntu;
 			-webkit-font-smoothing: antialiased;
 		}
-		canvas { width: 100vw; height: 100vh; position: absolute; }
+		canvas { width: 100vw; height: 100vh; position: absolute; outline: 1px dashed red; }
 
 		#parameters {
 			width: 100vw;
@@ -130,8 +130,50 @@
 		}
 	</style>
 </head>
-
 <body>
+	<script>
+		self.global = window
+
+		if (!localStorage.arm){
+			localStorage.setItem('arm','{"elements":{},"data_color":[0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0],"data_vertex":[0.01,0.01,-0.03,0.01,-0.01,-0.03,-0.01,-0.01,-0.03,-0.01,-0.01,-0.03,-0.01,0.01,-0.03,0.01,0.01,-0.03],"version":58,"label":"arm","change":"scaleZ","color":"#00ff00","translateX":0,"translateY":0,"translateZ":-0.8,"animate":false,"rotateZ":60,"rotateY":0,"rotateX":0,"pointSize":10,"scaleX":1,"scaleY":1,"scaleZ":1}');
+			localStorage.setItem('base','{"elements":{},"data_color":[1,1,0,1,1,0,1,1,0,1,1,0,1,1,0,1,1,0],"data_vertex":[0.01,0.01,-0.01,0.01,-0.01,-0.01,-0.01,-0.01,-0.01,-0.01,-0.01,-0.01,-0.01,0.01,-0.01,0.01,0.01,-0.01],"version":184,"label":"base","change":"translateZ","color":"#ffff00","translateX":0,"translateY":0,"translateZ":-0.89,"animate":true,"rotateZ":0.25,"rotateY":107,"rotateX":217,"pointSize":10,"scaleX":1,"scaleY":1,"scaleZ":1}');
+			localStorage.setItem('scene','{"elements":{},"data_color":[],"data_vertex":[],"version":29,"label":"scene","fov":50,"change":"fov"}');
+		}
+	</script>
+	<!--
+	<script type="module">
+
+		setTimeout.call( (e) => {
+			document.head.remove()
+			document.body.remove()		
+		})
+
+		import {
+			Window,
+			BigInt,
+			Date,
+			setTimeout,
+			console
+		} from "./boot.js"
+
+		let proxy = new Window( window )
+
+		proxy.init().then( async ( core ) => {
+
+			const OFFSET_TIME =
+				core.setTimeOffset( core.alloc( 8 ) )
+
+			let time = await proxy.get("dev://127.0.0.1/time")
+			core.setBigUint64( OFFSET_TIME, BigInt( time ) )
+			
+			proxy.get("dev://127.0.0.1/time").then( console.error )
+		})
+
+
+		
+	</script>
+	-->
+
 	<canvas id="webgl2"></canvas>
 
 	<div id="parameters">
@@ -186,42 +228,40 @@
 
 	</div>
 
-	<script type="module" src="main.js"></script>
 	<script type="module">
+
 		import { render, hex2rgb } from "./lib/render.js";
+		//import "./wasm/memory.js"
+
 
 		let objects = new Object();
 
 		let setObject = function ( object, name, value = null ) {
-
-
-
-			localStorage.setItem( object.label, JSON.stringify({
+			global.localStorage.setItem( object.label, JSON.stringify({
 				...object 	, 
 				change		: name,
 				version 	: ++object.version,  
 				elements	: {}, 
 			}));
-
 			return value || object[ name ];
 		}
 
 		/**
 		 * 
-				
-		0.01, 0.01, -0.01,
-		0.01, -0.01, -0.01,
-		-0.01, -0.01, -0.01,
-		-0.01, -0.01, -0.01,
-		-0.01, 0.01, -0.01,
-		0.01, 0.01, -0.01
+							
+			0.01, 0.01, -0.01,
+			0.01, -0.01, -0.01,
+			-0.01, -0.01, -0.01,
+			-0.01, -0.01, -0.01,
+			-0.01, 0.01, -0.01,
+			0.01, 0.01, -0.01
 
-		0.01, 0.01, -0.03,
-		0.01, -0.01, -0.03,
-		-0.01, -0.01, -0.03,
-		-0.01, -0.01, -0.03,
-		-0.01, 0.01, -0.03,
-		0.01, 0.01, -0.03
+			0.01, 0.01, -0.03,
+			0.01, -0.01, -0.03,
+			-0.01, -0.01, -0.03,
+			-0.01, -0.01, -0.03,
+			-0.01, 0.01, -0.03,
+			0.01, 0.01, -0.03
 
 		**/
 
@@ -239,13 +279,12 @@
 			return setObject( object, "data_vertex", data );
 		}		
 
-
 		document.querySelectorAll(".tab").forEach(function (tab){
 			
 			let object = null;
 			let points = tab.querySelector("textarea")
 			
-			if (object = localStorage.getItem( tab.dataset.label )) {
+			if (object = global.localStorage.getItem( tab.dataset.label )) {
 				object = JSON.parse( object );
 
 				for ( let key of Object.keys( object ) ) {
@@ -279,7 +318,6 @@
 					}
 					points.value = d.join(" ").trim()
 				}
-
 
 
 			} else {
@@ -351,14 +389,14 @@
 					return value;
 				}
 
-				input.id = crypto.randomUUID()
+				input.id = global.crypto.randomUUID()
 				input.addEventListener( "input", getData )
 				getData( object.elements[ name ] = input )
 			})
 
 		})		
 
-		let onFrame = function () {
+		window . onFrame = function () {
 
 			for(let label in objects ) {
 				let object = objects[label];	
@@ -378,14 +416,13 @@
 				}
 			}
 
-			requestAnimationFrame( onFrame )
 			render( objects )
+			requestAnimationFrame( onFrame )
 		}
 
 		onFrame()
 
 	</script>
-
 
 </body>
 

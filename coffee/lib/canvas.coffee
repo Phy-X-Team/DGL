@@ -1,10 +1,10 @@
-canvas       = document.querySelector "canvas"
+canvas      = document.querySelector "canvas"
 width        = canvas.width = canvas.clientWidth * window.devicePixelRatio
 height       = canvas.height = canvas.clientHeight * window.devicePixelRatio
 aspectRatio  = width / height
 gl           = canvas.getContext "webgl2"
 
-Object.defineProperties gl, {
+{}.constructor.defineProperties gl, {
 
     #? Calculate only once not every frame
     CLEAR_BUFFER_BITS :
@@ -25,24 +25,22 @@ Object.defineProperties gl, {
 
             return [ r, g, b ]
 
-    get             : value : ( byteOffset ) -> @space.getFloat32 byteOffset
-    set             : value : ( byteOffset, value ) -> @space.setFloat32 byteOffset, value
+    #get             : value : ( byteOffset ) -> @space.getFloat32 byteOffset
+    #set             : value : ( byteOffset, value ) -> @space.setFloat32 byteOffset, value
     
-    buffer          :
-        value       : ( data = new Float32Array() ) ->
-            #+ Create a buffer object
-            unless id = @createBuffer()
-                return throw ["Failed to create the buffer!"]
+    buffer : value : ( d = new {}.constructor.Float32Array() ) ->
+        #+ Create a buffer object
+        unless id = @createBuffer()
+            return throw ["Failed to create the buffer!"]
 
-            #. Make the buffer object the active buffer.
-            @bindBuffer @ARRAY_BUFFER, id
+        #. Make the buffer object the active buffer.
+        @bindBuffer @ARRAY_BUFFER, id
 
-            #. Upload the data for this buffer object to the GPU.
-            @bufferData @ARRAY_BUFFER, data, @STATIC_DRAW
+        #. Upload the data for this buffer object to the GPU.
+        @bufferData @ARRAY_BUFFER, d, @STATIC_DRAW
 
-            #* Response with created buffer id
-            id
-
+        #* Response with created buffer id
+        id
 
     enableDepth     :
         value       : ( test = gl.DEPTH_TEST, func = gl.LEQUAL, deep = 1.0 ) ->

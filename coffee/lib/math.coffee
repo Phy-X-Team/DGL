@@ -426,6 +426,33 @@ class Matrix4 extends Float32Array
         s = Math.sin angle
         c = Math.cos angle
 
+        ###
+            
+        @rotateXMatrix      = ( sin, cos ) =>
+            new Float32Array [
+                1  ,  0  ,  0  ,  0
+                0  , cos ,-sin ,  0
+                0  , sin , cos ,  0
+                0  ,  0  ,  0  ,  1
+            ]
+
+        @rotateYMatrix      = ( sin, cos ) =>
+            new Float32Array [
+            cos ,  0  , sin ,  0
+                0  ,  1  ,  0  ,  0
+            -sin ,  0  , cos ,  0
+                0  ,  0  ,  0  ,  1
+            ]
+
+        @rotateZMatrix      = ( sin, cos ) =>
+            new Float32Array [
+            cos ,-sin ,  0  ,  0
+            sin , cos ,  0  ,  0
+                0  ,  0  ,  1  ,  0
+                0  ,  0  ,  0  ,  1
+            ]
+
+        ###
         
         if       x_axis isnt 0 and y_axis is 0 and z_axis is 0          #* Rotation around X axis
             s = -s if x_axis < 0

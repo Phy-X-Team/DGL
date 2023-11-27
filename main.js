@@ -51,8 +51,7 @@ do ->
     console.error "_resetter (a):", bobject.a = "özgür"
     console.error "_resetter (a):", bobject
 */
-setTimeout(function() {
-  console.log("dump defined!");
+global.setTimeout(function() {
   return Object.defineProperties(Buffer.prototype, {
     dump: {
       get: function() {
@@ -86,7 +85,10 @@ export var Buffer = (function() {
     }
 
     allocate(byteLength) {
-      var buffer, length, offset, shifts;
+      var buffer, length, offset, ref, shifts;
+      if (!!this.link) {
+        this.link = (ref = this.link) != null ? ref.allocate(byteLength) : void 0;
+      }
       length = this.byteLength + byteLength;
       offset = this.byteLength + this.byteOffset;
       this.buffer.resize(byteLength + this.buffer.byteLength);
@@ -112,12 +114,12 @@ export var Buffer = (function() {
     }
 
     setBufferType(type, offset = 0) {
-      this.setUint16(offset, type);
+      this.setU16(offset, type);
       return this;
     }
 
     setBufferSize(size = this.byteLength, offset = 0) {
-      this.setUint32(offset + 2, size);
+      this.setU32(offset + 2, size);
       return this;
     }
 
@@ -215,7 +217,7 @@ export var Buffer = (function() {
       }
       for (i = k = 0, len1 = buffer.length; k < len1; i = ++k) {
         uint = buffer[i];
-        this.setUint8(offset + i, uint);
+        this.setUi8(offset + i, uint);
       }
       return this;
     }
@@ -239,9 +241,9 @@ export var Buffer = (function() {
       offset = this.allocate(length = buffer.byteLength);
       reader = isView && buffer || new DataView(buffer);
       for (i = j = 0, ref = length; (0 <= ref ? j < ref : j > ref); i = 0 <= ref ? ++j : --j) {
-        this.setUint8(offset + i, reader.getUint8(i));
+        this.setUi8(offset + i, reader.getUint8(i));
       }
-      return [offset, length];
+      return new buffer.constructor(this.buffer, offset, length);
     }
 
     writeArray(array, TypedArray = Float32Array) {
@@ -253,20 +255,51 @@ export var Buffer = (function() {
       writer = (function() {
         switch (TypedArray) {
           case Float32Array:
-            return DataView.prototype.setFloat32;
+            return this.setF32;
           case Uint32Array:
-            return DataView.prototype.setUint32;
+            return this.setU32;
           case Uint16Array:
-            return DataView.prototype.setUint16;
+            return this.setU16;
           case Uint8Array:
-            return DataView.prototype.setUint8;
+            return this.setUi8;
         }
-      })();
+      }).call(this);
       while (l -= length) {
-        console.log(l, offset, offset + l, l / length, buffer[l / length], this.byteLength);
         writer.call(this, offset + l, buffer[l / length]);
       }
       return object;
+    }
+
+    setUi8(offset, value) {
+      this.setUint8(offset, value);
+      if (this.link) {
+        this.link.setUint8(offset, value);
+      }
+      return value;
+    }
+
+    setU16(offset, value) {
+      this.setUint16(offset, value);
+      if (this.link) {
+        this.link.setUint16(offset, value);
+      }
+      return value;
+    }
+
+    setU32(offset, value) {
+      this.setUint32(offset, value);
+      if (this.link) {
+        this.link.setUint32(offset, value);
+      }
+      return value;
+    }
+
+    setF32(offset, value) {
+      this.setFloat32(offset, value);
+      if (this.link) {
+        this.link.setFloat32(offset, value);
+      }
+      return value;
     }
 
   };
@@ -279,7 +312,7 @@ export var Buffer = (function() {
 
 export var glProgram = class glProgram extends Buffer {
   addBuffer(buffer) {
-    return this.writeBuffer(buffer, buffer);
+    return buffer.link = this.writeBuffer(buffer);
   }
 
   addShader(buffer) {
@@ -292,13 +325,6 @@ export var glProgram = class glProgram extends Buffer {
 
   addUniform(buffer) {
     return this.addBuffer(buffer);
-  }
-
-  createObject() {
-    var length, offset;
-    length = glObject.prototype.headLength;
-    offset = this.allocate(length);
-    return new glObject(this.buffer, offset, length);
   }
 
   getVertexShader() {
@@ -329,19 +355,19 @@ export var glAttribute = (function() {
     }
 
     setAttribType(type = gl.FLOAT) {
-      return this.setUint16(this.offsetType, type);
+      return this.setU16(this.offsetType, type);
     }
 
     setAttribSlot(slot = 0) {
-      return this.setUint8(this.offsetSlot, slot);
+      return this.setUi8(this.offsetSlot, slot);
     }
 
     setAttribSize(size = 1) {
-      return this.setUint8(this.offsetSize, size);
+      return this.setUi8(this.offsetSize, size);
     }
 
     setAttribSkip(skip = 0) {
-      return this.setUint8(this.offsetSkip, skip);
+      return this.setUi8(this.offsetSkip, skip);
     }
 
     getAttribName() {
@@ -396,12 +422,12 @@ export var glInterleavedAttribute = (function() {
     }
 
     setStride(stride) {
-      this.setUint8(this.strideOffset, stride);
+      this.setUi8(this.strideOffset, stride);
       return stride;
     }
 
     setLength(length) {
-      this.setUint8(this.lengthOffset, length);
+      this.setUi8(this.lengthOffset, length);
       return length;
     }
 
@@ -460,7 +486,7 @@ glUniform = (function() {
 export var glUniform1f = (function() {
   class glUniform1f extends glUniform {
     setUniformValue(value) {
-      this.setFloat32(this.ufv0Offset, value);
+      this.setF32(this.ufv0Offset, value);
       return value;
     }
 
@@ -487,38 +513,38 @@ export var glColor = (function() {
         c = [c[0], c[0], c[1], c[1], c[2], c[2]];
       }
       c = '0x' + c.join('');
-      this.setFloat32(this.redOffset, ((c >> 16) & 255) / 255);
-      this.setFloat32(this.greenOffset, ((c >> 8) & 255) / 255);
-      return this.setFloat32(this.blueOffset((c & 255) / 255));
+      this.setF32(this.redOffset, ((c >> 16) & 255) / 255);
+      this.setF32(this.greenOffset, ((c >> 8) & 255) / 255);
+      return this.setF32(this.blueOffset((c & 255) / 255));
     }
 
     setRGBAColor(red, green, blue, alpha = 1) {
-      this.setFloat32(this.redOffset, red);
-      this.setFloat32(this.greenOffset, green);
-      this.setFloat32(this.blueOffset, blue);
-      return this.setFloat32(this.alphaOffset, alpha);
+      this.setF32(this.redOffset, red);
+      this.setF32(this.greenOffset, green);
+      this.setF32(this.blueOffset, blue);
+      return this.setF32(this.alphaOffset, alpha);
     }
 
     setRGBColor(red, green, blue) {
-      this.setFloat32(this.redOffset, red);
-      this.setFloat32(this.greenOffset, green);
-      return this.setFloat32(this.blueOffset, blue);
+      this.setF32(this.redOffset, red);
+      this.setF32(this.greenOffset, green);
+      return this.setF32(this.blueOffset, blue);
     }
 
     setRedColor(red) {
-      return this.setFloat32(this.redOffset, red);
+      return this.setF32(this.redOffset, red);
     }
 
     setGreenColor(green) {
-      return this.setFloat32(this.greenOffset, green);
+      return this.setF32(this.greenOffset, green);
     }
 
     setBlueColor(blue) {
-      return this.setFloat32(this.blueOffset, blue);
+      return this.setF32(this.blueOffset, blue);
     }
 
     setColorAlpha(alpha) {
-      return this.setFloat32(this.alphaOffset, alpha);
+      return this.setF32(this.alphaOffset, alpha);
     }
 
     getRGBAColor() {
@@ -573,10 +599,10 @@ export var glObject = (function() {
   class glObject extends Buffer {
     needsUpdate(mark) {
       if (mark == null) {
-        this.setUint8(this.offsetUpdateMark, 0);
+        this.setUi8(this.offsetUpdateMark, 0);
         return Boolean(this.getUint8(this.offsetChangeMark)); //TODO mark changed when asked 
       }
-      this.setUint8(this.offsetUpdateMark, Number(mark));
+      this.setUi8(this.offsetUpdateMark, Number(mark));
       return mark;
     }
 
@@ -585,62 +611,49 @@ export var glObject = (function() {
     }
 
     setRotateX(radians) {
-      return this.setFloat32(this.offsetRotateX, radians);
+      return this.setF32(this.offsetRotateX, radians);
     }
 
     setRotateY(radians) {
-      return this.setFloat32(this.offsetRotateY, radians);
+      return this.setF32(this.offsetRotateY, radians);
     }
 
     setRotateZ(radians) {
-      return this.setFloat32(this.offsetRotateZ, radians);
+      return this.setF32(this.offsetRotateZ, radians);
     }
 
     setScaleX(ratio) {
-      return this.setFloat32(this.offsetScaleX, ratio);
+      return this.setF32(this.offsetScaleX, ratio);
     }
 
     setScaleY(ratio) {
-      return this.setFloat32(this.offsetScaleY, ratio);
+      return this.setF32(this.offsetScaleY, ratio);
     }
 
     setScaleZ(ratio) {
-      return this.setFloat32(this.offsetScaleZ, ratio);
+      return this.setF32(this.offsetScaleZ, ratio);
     }
 
     setTranslateX(distance) {
-      return this.setFloat32(this.offsetTranslateX, distance);
+      return this.setF32(this.offsetTranslateX, distance);
     }
 
     setTranslateY(distance) {
-      return this.setFloat32(this.offsetTranslateY, distance);
+      return this.setF32(this.offsetTranslateY, distance);
     }
 
     setTranslateZ(distance) {
-      return this.setFloat32(this.offsetTranslateZ, distance);
+      return this.setF32(this.offsetTranslateZ, distance);
     }
 
     setPointCount(count) {
-      return this.setUint32(this.offsetPointCount, count);
+      return this.setU32(this.offsetPointCount, count);
     }
 
     setBufferData(data, TYPE) {
-      if (!isNaN(this.writeArray(data, TYPE))) {
-        return this.pointer != null ? this.pointer : this.pointer = this.writeArray(data, TYPE);
-      }
+      return this.writeArray(data, TYPE);
     }
 
-    //TODO       BURADA EGER ALT OBJE BIR POINTERE SAHIPSE
-    //TODO       O ZAMAN ATTACH OLMUS DEMEKTIR
-    //TODO       AMA SAYI DEGIL BIR BUFFER OLMALI BU POINTER
-    //TODO       ISTE O BUFFER BUNUN SAHIBI
-    //TODO       SANIRIM AYRICA BUNU ALLOCATE YAPINCA YENI BIR BUFFER OLUYOR
-    //TODO       O MAX BYTE LENGTH EN KUCUK OBJEDE BILE BUYUK SANIRIM
-    //TODO       NEYSE KUCUK OLANI ALLOCATE YAP BUYUSUN
-    //TODO       SONRA PROGRAMA ATTACH YAPILDIGINDA KOPYALA
-    //TODO       GERI KALAN OBJEYE DE POINTER ATA PROGRAMI
-    //TODO       SONRA KUCUK OBJECE YAPILAN DEGISIKLIKLERI PROGRAMA YAZ
-    //TODO       <3
     getName() {
       return this.readString(this.offsetName, this.lengthName);
     }
@@ -787,28 +800,28 @@ export class TypedBuffer extends DataView
         @getUint32 6
 
     setBufferType           : ( type, offset = 0 ) -> 
-        @setUint16 offset, type ; type
+        @setU16 offset, type ; type
 
     setBufferSize           : ( size, offset = 0 ) -> 
-        @setUint32 offset + 2, size ; size
+        @setU32 offset + 2, size ; size
 
     setByteOffset           : ( byte, offset = 0 ) -> 
-        @setUint32 offset + 6, byte ; byte
+        @setU32 offset + 6, byte ; byte
 
     addUint8                : ( value ) -> 
         offset = @allocate(1)
-        @setUint8 offset, value ; offset
+        @setUi8 offset, value ; offset
 
     addUint16               : ( value ) -> 
         offset = @allocate(2)
-        @setUint16 offset, value ; offset
+        @setU16 offset, value ; offset
 
     addUint32               : ( value ) -> 
         offset = @allocate(4)
-        @setUint32 offset, value ; offset
+        @setU32 offset, value ; offset
 
     addFloat32              : ( value ) -> 
-        @setFloat32 @allocate(4), value
+        @setF32 @allocate(4), value
 
     allocateBuffer          : ( type, size ) ->
         offset = @allocate size + @headerSize
@@ -875,7 +888,7 @@ export class TypedBuffer extends DataView
     copy                    : ( buffer, offset ) ->
         length = buffer.byteLength
         for i in [ 0 ... buffer.byteLength ]
-            @setUint8 offset + i, buffer.getUint8 i
+            @setUi8 offset + i, buffer.getUint8 i
         offset + length
 
     readString              : ( offset, length ) ->
@@ -895,7 +908,7 @@ export class TypedBuffer extends DataView
         offset ?= @allocate buffer.byteLength
 
         for uint8, index in new Uint8Array buffer 
-            @setUint8 offset + index, uint8
+            @setUi8 offset + index, uint8
 
         offset
 
@@ -996,24 +1009,24 @@ export class glProgram2 extends TypedBuffer
         length = buffer.byteLength
 
         for uint8, i in new Uint8Array buffer
-            @setUint8 offset + i, uint8
+            @setUi8 offset + i, uint8
 
         offset
 
     setAttributeSize        : ( size, offset ) ->
-        @setUint8 offset + @maxNameLength, size
+        @setUi8 offset + @maxNameLength, size
 
     setAttributeType        : ( type = @FLOAT, offset ) ->
-        @setUint16 offset + @maxNameLength + 1, type
+        @setU16 offset + @maxNameLength + 1, type
 
     setAttributeStride      : ( stride, offset ) ->
-        @setUint8 offset + @maxNameLength + 3, stride
+        @setUi8 offset + @maxNameLength + 3, stride
 
     setAttributeOffset      : ( Offset, offset ) ->
-        @setUint8 offset + @maxNameLength + 4, Offset
+        @setUi8 offset + @maxNameLength + 4, Offset
 
     setAttirbuteIndex       : ( index, offset ) ->
-        @setUint8 offset + @maxNameLength + 5, index
+        @setUi8 offset + @maxNameLength + 5, index
 
     setUniform1f            : ( label, value ) ->
 
@@ -1096,7 +1109,7 @@ export class glAttrib extends TypedBuffer
         )
 
     setAttribLocation       : ( location ) ->
-        @setUint8 @locationOffset, location
+        @setUi8 @locationOffset, location
 
     getAttribLocation       : ->
         @getUint8 @locationOffset
@@ -1107,32 +1120,32 @@ export class glAttrib extends TypedBuffer
         tarray = new Uint8Array buffer, 0, length 
 
         for uint8, index in tarray
-            @setUint8 @offsetName + index, uint8
+            @setUi8 @offsetName + index, uint8
         @
 
     getAttribName           : ->
         decode.string @buffer, @offsetName, @lengthName
 
     setAttribSize           : ( size ) ->
-        @setUint8 @offsetSize, size ; @
+        @setUi8 @offsetSize, size ; @
 
     getAttribSize           : ->
         @getUint8 @offsetSize
 
     setAttribType           : ( type ) ->
-        @setUint16 @offsetType, type; @
+        @setU16 @offsetType, type; @
 
     getAttribType           : ->
         @getUint16 @offsetType
 
     setAttribStride         : ( size = @getAttributeSize(), bytes = @BYTES_PER_ELEMENT ) ->
-        @setUint8( @strideOffset, stride = size * bytes ); stride
+        @setUi8( @strideOffset, stride = size * bytes ); stride
 
     getAttribStride         : ->
         @getUint8 @strideOffset
 
     setAttribOffset         : ( prev_attrib_sizes = 0, bytes = @BYTES_PER_ELEMENT ) ->
-        @setUint8( @offsetOffset, offset = prev_attrib_sizes * bytes ); offset
+        @setUi8( @offsetOffset, offset = prev_attrib_sizes * bytes ); offset
 
     getAttribOffset         : ->
         @getUint8 @offsetOffset

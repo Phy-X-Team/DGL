@@ -37,23 +37,26 @@ class Frustum extends Matrix4
         tx = -near * (   left + right ) / w
         ty = -near * ( bottom + top   ) / h
 
-        super [
+        matrix = [
             sx,       0,       0,      0,
              0,      sy,       0,      0,
              0,       0,      c2,     -1,
             tx,      ty,      c1,      0
         ]
 
+        super matrix
+
 
 #: Perspective projection camera from frusrum
 class Perspective extends Frustum
 
-    fovy    :  60
-    near    :  .1
-    far     : 100
+    fovy    :   60
+    near    :  .01
+    far     : 1000
     
     #. Matrix using a field-of-view and an aspect ratio.
-    constructor : ( fovy, aspect, near = 0.1, far = 100 ) ->
+    constructor : ( fovy, aspect, near = 0.01, far = 1000 ) ->
+
         if  fovy <= 0 or fovy >= 180 or aspect <= 0
             throw [ "Invalid parameters to perspective", { fovy, aspect } ]
         

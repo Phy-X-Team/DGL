@@ -1,0 +1,28 @@
+<mxfile host="Electron" modified="2023-09-13T07:18:08.060Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/21.6.8 Chrome/114.0.5735.289 Electron/25.5.0 Safari/537.36" etag="11nWzAYEWmEayQRxBZGA" version="21.6.8" type="device">
+  <diagram name="Page-1" id="Gw8mCOKWGdmi-t9U_AIS">
+    <mxGraphModel dx="2844" dy="1806" grid="1" gridSize="10" guides="0" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="850" pageHeight="1100" background="#FCFDFF" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="A2-x1YKvG2tO-FCmBMqb-3" value="" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;startSize=14;endSize=14;sourcePerimeterSpacing=8;targetPerimeterSpacing=8;rounded=0;strokeColor=#FF6392;labelBackgroundColor=none;fontColor=#001E3D;sketch=1;curveFitting=1;jiggle=2;fillColor=#FFE45E;labelBorderColor=none;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=16;" edge="1" parent="1" source="A2-x1YKvG2tO-FCmBMqb-1" target="A2-x1YKvG2tO-FCmBMqb-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <UserObject label="Memory" tooltip="&lt;ArrayBuffer&gt;" tags="Type" placeholders="1" id="A2-x1YKvG2tO-FCmBMqb-1">
+          <mxCell style="rounded=0;whiteSpace=wrap;html=1;enumerate=1;enumerateValue=ArrayBuffer;labelBackgroundColor=none;fillColor=#FFE45E;strokeColor=#FF6392;fontColor=#001E3D;sketch=1;curveFitting=1;jiggle=2;labelBorderColor=none;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=16;" vertex="1" parent="1">
+            <mxGeometry x="-930" y="-420" width="108" height="42" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="Pointer" tooltip="&lt;ArrayBuffer&gt;" id="A2-x1YKvG2tO-FCmBMqb-2">
+          <mxCell style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;fillColor=#FFE45E;strokeColor=#FF6392;fontColor=#001E3D;sketch=1;curveFitting=1;jiggle=2;enumerate=1;enumerateValue=Number;labelBorderColor=none;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=16;" vertex="1" parent="1">
+            <mxGeometry x="-600" y="-290" width="108" height="42" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="core" tooltip="&lt;ArrayBuffer&gt;" id="A2-x1YKvG2tO-FCmBMqb-4">
+          <mxCell style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;fillColor=#FFE45E;strokeColor=#FF6392;fontColor=#001E3D;sketch=1;curveFitting=1;jiggle=2;enumerate=1;enumerateValue=Number;labelBorderColor=none;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=16;" vertex="1" parent="1">
+            <mxGeometry x="-1030" y="-190" width="108" height="42" as="geometry" />
+          </mxCell>
+        </UserObject>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
