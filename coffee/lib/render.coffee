@@ -160,11 +160,13 @@ do ->
 data_transform = null
 round = null
 vertexCount = 0
+pointSize = 0
+lineWidth = 0
 
 DRAW_FUNC = gl.TRIANGLES
 LINE_FUNC = gl.LINE_STRIP
 
-colorizeArray = ( array = new Float32Array, color ) ->
+colorizeArray = ( array = new Float32Array, color, randomOffset = 0 ) ->
     length = array.length
     result = new array.constructor length
 
@@ -174,13 +176,18 @@ colorizeArray = ( array = new Float32Array, color ) ->
 
     i = 0
     while i < length
+
+        if  randomOffset
+            unless i % randomOffset
+                colors = [ Math.random(), 1, Math.random() ]
+
         result.set colors, i
         i += colors . length
 
     result
 
 
-drawTriangles = ( triangleCount = 1, size = 1, startAngle = 0, totalAngle = 2 * Math.PI, z = 0 ) ->
+drawTriangle2s = ( triangleCount = 1, size = 1, startAngle = 0, totalAngle = 2 * Math.PI, z = 0 ) ->
 
     vertexCount = triangleCount * 3
     valuesCount = triangleCount * 9
@@ -213,6 +220,59 @@ drawTriangles = ( triangleCount = 1, size = 1, startAngle = 0, totalAngle = 2 * 
         vertexArray[i++] = size * Math.sin t
         vertexArray[i++] = z
         t -= a
+
+    vertexArray
+
+
+drawPolygon = ( triangleCount = 1, width = 1, height = 1, totalAngle = 2 * Math.PI, startAngle = Math.PI, xOffset = 0, yOffset = 0, zOffset = 0, counterclockwise = false, stripeRadius = 0 ) ->
+
+    vertexCount = triangleCount * 3
+    valuesCount = triangleCount * 9
+    vertexArray = new Float32Array valuesCount
+
+    a = totalAngle / triangleCount
+    t = startAngle / ( 1 + ( triangleCount % 2 ) )
+
+    if !counterclockwise
+        a *= -1
+
+    x = xOffset + width * Math.cos t
+    y = yOffset + height * Math.sin t
+    i = 0
+
+    xStripe = xOffset + stripeRadius * Math.cos t
+    yStripe = yOffset + stripeRadius * Math.sin t
+
+    while i < valuesCount
+        
+        vertexArray[i+2] =
+        vertexArray[i+5] =
+        vertexArray[i+8] = zOffset
+
+        vertexArray[i+3] = x
+        vertexArray[i+4] = y
+
+        vertexArray[i+0] = xStripe
+        vertexArray[i+1] = yStripe
+
+        t = t + a
+
+        if  stripeRadius and 0 < i % 18
+
+            xStripe = xOffset + stripeRadius * Math.cos t
+            yStripe = yOffset + stripeRadius * Math.sin t
+
+            vertexArray[i+6] = xStripe
+            vertexArray[i+7] = yStripe
+    
+        else
+            x = xOffset + width * Math.cos t
+            y = yOffset + height * Math.sin t
+
+            vertexArray[i+6] = x
+            vertexArray[i+7] = y
+
+        i += 9
 
     vertexArray
 
@@ -262,10 +322,42 @@ drawFPolygon    = ( count, size, startAngle, totalAngle ) -> drawTriangleFan cou
 drawFRect       = ( size ) -> drawPolygonFan 4, size, Math.PI/4
 drawFCircle     = ( size, points = 100 ) -> drawPolygonFan points, size
 
-drawPolygon     = ( count, size, startAngle, totalAngle ) -> drawTriangles count - 2, size, startAngle, totalAngle
-drawRect        = ( size ) -> drawPolygon 4, size, Math.PI/4
-drawCircle      = ( size, points = 100 ) -> drawPolygon points, size
+drawRect        = ( size = 1, totalAngle, startAngle = Math.PI/4, x, y, z, counterclockwise ) -> drawPolygon 4, size, size, totalAngle, startAngle, x, y, z, counterclockwise
+drawCircle      = ( size, totalAngle, startAngle, points = 50, x, y, z, counterclockwise ) -> drawPolygon points, size, size, totalAngle, startAngle, x, y, z, counterclockwise
 
+rect            = ( x = 0, y = 0, width = 1, height = 1, startAngle = Math.PI/4, totalAngle = Math.PI * 2, z, counterclockwise ) ->
+    drawPolygon 4, width, height, totalAngle, startAngle, x, y, z, counterclockwise
+
+arc             = ( x = 0, y = 0, radius = 1, startAngle = 0, endAngle = 2 * Math.PI, counterclockwise = false, stripeRadius = 0, points = 100, z = 0 ) ->
+    totalAngle = Math.abs if !counterclockwise then startAngle - endAngle else endAngle + startAngle
+    points = 27 * Math.ceil points / 27
+    drawPolygon points, radius, radius, totalAngle, startAngle, x, y, z, counterclockwise, stripeRadius
+
+roundRect       = ( x = 0, y = 0, width = 1, height = 1, radii = .2 ) ->
+    startAngle = Math.PI / 2
+    halfRadii = radii / 2
+    halfWidth = width / 2
+    halfHeight = height / 2
+    quarterAngle = Math.PI / 2
+
+    #...drawPolygon 4, width, height, Math.PI * 2, Math.PI/4, x, y
+    arr = new Float32Array( 15000 )
+    offset = 0
+
+    vRectWidth = width - ( radii * 2 )
+    vRectHeight = height - ( radii * 2 )
+
+    arr.set pol = rect( x, y, vRectWidth, vRectHeight), offset
+    offset += pol.length
+    
+    arr.set pol = rect( x + vRectWidth/2 + radii, y - vRectHeight/2 - radii/2, radii, radii), offset
+    offset += pol.length
+    
+    arr.set pol = arc( x + vRectWidth/2 + radii, y + halfHeight - radii/4, radii, Math.PI/2, Math.PI), offset
+    offset += pol.length
+    
+
+    arr.slice 0, offset
 
 #drawRectFan 1
 #drawPolygonFan 4
@@ -275,28 +367,35 @@ drawCircle      = ( size, points = 100 ) -> drawPolygon points, size
 #drawCircle 0.5
 #drawRect 0.5
 
-shape = drawPolygon 50, 0.5, -Math.PI / 2, Math.PI * 2
-#shape = drawRect 0.4
+#shape = drawPolygon 4, 0.5, Math.PI / 3, Math.PI/2 
+#shape = drawCircle 0.7, Math.PI/2, Math.PI/2, 30
+#shape = arc 0, 0, .5, 0, Math.PI, true, 0.3, 180
+#shape = arc 0, 0, .3
+#shape = rect 0, 0, 0.5, 0.4, 0.1
+shape = roundRect 0, 0, 1, 0.8, 0.15
+
 
 round = {
     label : "round"
     data_vertex : shape
-    data_color : colorizeArray shape, [ 0, 0, 0, 0, 0, 1, 0, 1, 0 ]
+    data_color : colorizeArray shape, [ 1, 0, 0, 0, 0, 0, 0, 0, 1 ]
     translateX : 0
     translateY : 0
-    translateZ : -1.0
+    translateZ : -2.0
     scaleX : 1
     scaleY : 1
     scaleZ : 1
     rotateX : 0
     rotateY : 0
     rotateZ : 0
+    pointSize : 0
+    lineWidth : 0
 }
 
 
 console.log  round.data_vertex
 
-
+rotateY = 0
 render = ( objects ) ->
 
     #context.draw()
@@ -317,9 +416,11 @@ render = ( objects ) ->
         {
             data_vertex, data_color, color, pointSize,
             translateX, translateY, translateZ,
-            rotateX, rotateY, rotateZ,
-            scaleX, scaleY, scaleZ
+            rotateX, rotateYx, rotateZ,
+            scaleX, scaleY, scaleZ, lineWidth
         } = parameters
+
+        rotateY += Math.PI / 30
 
         #TODO   burada arm'a uygulanacak view_matrix aslinda oncesinde base'de
         #TODO   olusturulmus
@@ -359,27 +460,33 @@ render = ( objects ) ->
         gl.bindBuffer gl.ARRAY_BUFFER, buf_locationVertex
         gl.bufferData gl.ARRAY_BUFFER, data_vertex, gl.STATIC_DRAW
 
+        vertexCount = data_vertex.length / 3
+
         gl.enableVertexAttribArray a_Vertex_location 
         gl.vertexAttribPointer a_Vertex_location, 3, gl.FLOAT, no, 0, 0
         
 
-        #* Sending point size value
-        gl.uniform1f u_PointSize_location, pointSize = 10
-
         #* Rendering at final
         gl.drawArrays DRAW_FUNC, 0, vertexCount
 
-
-        gl.buffer data_color.slice().fill 0            
-        gl.enableVertexAttribArray a_Color_location
-        gl.vertexAttribPointer a_Color_location, 3, gl.FLOAT, no, 0, 0
-
-        gl.drawArrays LINE_FUNC, 0, vertexCount
+        continue
 
 
-        gl.buffer data_color.slice().fill 1            
-        gl.vertexAttribPointer a_Color_location, 3, gl.FLOAT, no, 0, 0
+        if  lineWidth
+            gl.buffer data_color.slice().fill 0            
+            gl.enableVertexAttribArray a_Color_location
+            gl.vertexAttribPointer a_Color_location, 3, gl.FLOAT, no, 0, 0
 
-        gl.drawArrays gl.POINTS, 0, vertexCount
+            gl.drawArrays LINE_FUNC, 0, vertexCount
+
+
+        if  pointSize
+            #* Sending point size value
+            gl.uniform1f u_PointSize_location, pointSize
+        
+            gl.buffer data_color.slice().fill 1            
+            gl.vertexAttribPointer a_Color_location, 3, gl.FLOAT, no, 0, 0
+
+            gl.drawArrays gl.POINTS, 0, vertexCount
 
 

@@ -44,9 +44,9 @@ gl           = canvas.getContext "webgl2"
 
     enableDepth     :
         value       : ( test = gl.DEPTH_TEST, func = gl.LEQUAL, deep = 1.0 ) ->
-            @enable       test
-            @depthFunc    func
-            @clearDepth   deep
+            #@enable       test
+            #@depthFunc    func
+            #@clearDepth   deep
             @
     
     program         :
