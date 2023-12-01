@@ -367,6 +367,8 @@ roundRect       = ( x = 0, y = 0, width = 1, height = 1, radii = .2 ) ->
 #drawCircle 0.5
 #drawRect 0.5
 
+#nodemon --exec electron --trace-warnings . -V -e js --ignore node_module -i ~debuf.js -i sass/* -i css/* -i canvas.js -i gl2.js -i prototype.js -i gl2.worker.js -i math4.js
+
 #shape = drawPolygon 4, 0.5, Math.PI / 3, Math.PI/2 
 #shape = drawCircle 0.7, Math.PI/2, Math.PI/2, 30
 #shape = arc 0, 0, .5, 0, Math.PI, true, 0.3, 180

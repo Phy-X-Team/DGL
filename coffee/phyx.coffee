@@ -657,7 +657,6 @@ class Text extends Buffer
         bufferArray.set charCodes
         bufferArray
 
-
 class Display extends DataView
 
     context : WebGL2RenderingContext 
